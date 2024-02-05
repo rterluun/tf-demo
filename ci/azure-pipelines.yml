@@ -1,0 +1,62 @@
+trigger:
+  branches:
+    include:
+      - '*' # All branches
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  tf_version: '1.7.2'
+  service_connection: 'Your-Azure-Service-Connection'
+  azure_subscription: 'Your-Azure-Subscription'
+
+stages:
+- stage: TerraformInitAndPlan
+  jobs:
+  - job: TerraformInitAndPlan
+    displayName: 'Terraform Init and Plan'
+    steps:
+    - checkout: self
+    - task: TerraformInstaller@1
+      displayName: install terraform
+      inputs:
+        terraformVersion: $(tf_version)
+    - task: AzureCLI@2
+      inputs:
+        azureSubscription: $(service_connection)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az account set --subscription $(azure_subscription)
+    - script: |
+        terraform init
+        terraform validate
+        terraform plan
+      displayName: 'Terraform init, validate and plan'
+      workingDirectory: $(Build.SourcesDirectory)/terraform
+
+- stage: TerraformApply
+  dependsOn: TerraformInitAndPlan
+  environment: 'TerraformApply' # This needs to be created in the Azure DevOps environment, to have a manual approval
+  jobs:
+  - job: TerraformApply
+    displayName: 'Terraform Apply'
+    steps:
+    - checkout: self
+    - task: TerraformInstaller@0
+      inputs:
+        terraformVersion: $(tf_version)
+    - task: AzureCLI@2
+      inputs:
+        azureSubscription: $(service_connection)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az account set --subscription $(azure_subscription)
+    - script: |
+        terraform init
+        terraform plan
+        terraform apply
+      displayName: 'Terraform init, plan and apply'
+      workingDirectory: $(Build.SourcesDirectory)/terraform
